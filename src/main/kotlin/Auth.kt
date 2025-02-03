@@ -20,7 +20,7 @@ import java.net.URI
 object Auth {
     private const val AUTHORIZE_URL = "https://www.strava.com/oauth/mobile/authorize"
     private const val TOKEN_URL = "https://www.strava.com/oauth/token"
-    private val dotenv = Dotenv.load();
+    private val dotenv = Dotenv.load()
     private val CLIENT_ID = dotenv.get("CLIENT_ID")!!
     private val CLIENT_SECRET = dotenv.get("CLIENT_SECRET")!!
     var TOKEN: String? = null

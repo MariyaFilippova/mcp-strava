@@ -1,23 +1,24 @@
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.cio.*
-import io.ktor.server.engine.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.server.sse.*
-import io.ktor.util.collections.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlinx.mcp.*
-import org.jetbrains.kotlinx.mcp.server.SSEServerTransport
 import org.jetbrains.kotlinx.mcp.server.Server
 import org.jetbrains.kotlinx.mcp.server.ServerOptions
 import org.jetbrains.kotlinx.mcp.server.StdioServerTransport
 
 
 fun main() {
-    `run mcp server using stdio`()
+    val server = configureServer()
+    val transport = StdioServerTransport()
+
+    runBlocking {
+        server.connect(transport)
+        val done = Job()
+        server.onCloseCallback = {
+            done.complete()
+        }
+        done.join()
+    }
 }
 
 fun configureServer(): Server {
@@ -82,52 +83,4 @@ fun configureServer(): Server {
     }
 
     return server
-}
-
-fun `run mcp server using stdio`() {
-    val server = configureServer()
-    val transport = StdioServerTransport()
-
-    runBlocking {
-        server.connect(transport)
-        val done = Job()
-        server.onCloseCallback = {
-            done.complete()
-        }
-        done.join()
-    }
-}
-
-fun `run sse mcp server with plain configuration`(port: Int): Unit = runBlocking {
-    val servers = ConcurrentMap<String, Server>()
-    println("Starting sse server on port $port. ")
-    println("Use inspector to connect to the http://localhost:$port/sse")
-
-    embeddedServer(CIO, host = "0.0.0.0", port = port) {
-        install(SSE)
-        routing {
-            sse("/sse") {
-                val transport = SSEServerTransport("/message", this)
-                val server = configureServer()
-
-                servers[transport.sessionId] = server
-
-                server.onCloseCallback = {
-                    servers.remove(transport.sessionId)
-                }
-
-                server.connect(transport)
-            }
-            post("/message") {
-                val sessionId: String = call.request.queryParameters["sessionId"]!!
-                val transport = servers[sessionId]?.transport as? SSEServerTransport
-                if (transport == null) {
-                    call.respond(HttpStatusCode.NotFound, "Session not found")
-                    return@post
-                }
-
-                transport.handlePostMessage(call)
-            }
-        }
-    }.start(wait = true)
 }
