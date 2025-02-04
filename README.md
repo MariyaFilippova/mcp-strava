@@ -13,7 +13,16 @@ Clone the MCP Strava Server repository to your local machine:
 git clone https://github.com/MariyaFilippova/mcp-strava.git
 ```
 
-### 2. Build the Project
+### 2. Configure Your CLIENT_ID and CLIENT_SECRET
+To set up your Strava API credentials, create a `.env` file in the root directory of the project. Add your `CLIENT_ID` and `CLIENT_SECRET` obtained from [Strava API settings](https://www.strava.com/settings/api) into the file as shown below:
+
+```dotenv
+CLIENT_ID="your-client-id"
+CLIENT_SECRET="your-client-secret"
+```
+
+   
+### 3. Build the Project
 Use Gradle to build the project and generate the executable JAR file:
 ```bash
 gradle shadowJar
@@ -22,7 +31,7 @@ gradle shadowJar
 The built server will be available at: `build/libs/strava-mcp-server-1.0.0-all.jar`
 
 
-### 3. Configure Claude for Desktop
+### 4. Configure Claude for Desktop
 
 To connect the MCP Strava Server to Claude for Desktop:
 
