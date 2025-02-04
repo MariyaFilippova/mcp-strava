@@ -14,7 +14,7 @@ git clone https://github.com/MariyaFilippova/mcp-strava.git
 ```
 
 ### 2. Configure Your CLIENT_ID and CLIENT_SECRET
-To set up your Strava API credentials, create a `.env` file in the root directory of the project. Add your `CLIENT_ID` and `CLIENT_SECRET` obtained from [Strava API settings](https://www.strava.com/settings/api) into the file as shown below:
+To set up your Strava API credentials, change  `src/main/resources/.env` file. Add your `CLIENT_ID` and `CLIENT_SECRET` obtained from [Strava API settings](https://www.strava.com/settings/api) into the file as shown below:
 
 ```dotenv
 CLIENT_ID="your-client-id"
