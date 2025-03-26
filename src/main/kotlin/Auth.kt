@@ -29,6 +29,7 @@ object Auth {
     private val httpClient = HttpClient(io.ktor.client.engine.cio.CIO)
 
     suspend fun auth() {
+        if (TOKEN != null) return
         val dotenv = Dotenv.configure().load()
         CLIENT_ID = dotenv.get("CLIENT_ID")!!
         CLIENT_SECRET = dotenv.get("CLIENT_SECRET")!!

@@ -28,9 +28,9 @@ data class Activity(
     val type: String,
     val sport_type: String,
     val id: Long,
-    val start_date: String,
-    val start_date_local: String,
-    val location_country: String,
+    val start_date: String?,
+    val start_date_local: String?,
+    val location_country: String?,
     val achievement_count: Int,
     val kudos_count: Int,
     val average_speed: Double,
@@ -46,6 +46,7 @@ data class Activity(
  * Fetch the last activity. If not preloaded, load all activities first.
  */
 suspend fun getLastActivity(): Activity? {
+    Auth.auth()
     if (activities.isEmpty()) {
         fillAllActivities()
     }
