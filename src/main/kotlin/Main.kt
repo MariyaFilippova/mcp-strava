@@ -10,20 +10,27 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("strava.Main")
 
 fun main() {
+    logger.info("Starting Strava MCP Server v2.0.0")
     val server = configureServer()
     val transport = StdioServerTransport(System.`in`.asSource().buffered(), System.out.asSink().buffered())
 
     runBlocking {
         server.createSession(transport)
+        logger.info("Server session created, waiting for requests")
         val done = Job()
         server.onClose {
+            logger.info("Server closing")
             done.complete()
         }
         done.join()
     }
     Auth.close()
+    logger.info("Server shutdown complete")
 }
 
 fun configureServer(): Server {

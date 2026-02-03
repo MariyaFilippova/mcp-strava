@@ -11,10 +11,13 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import org.slf4j.LoggerFactory
 import java.awt.Desktop
 import java.awt.GraphicsEnvironment
 import java.io.File
 import java.net.URI
+
+private val logger = LoggerFactory.getLogger("strava.Auth")
 
 @Serializable
 data class TokenData(
@@ -52,10 +55,12 @@ object Auth {
     }
 
     suspend fun auth() {
+        logger.debug("Starting authentication")
         loadCredentials()
 
         // Try to load existing token
         if (tryLoadPersistedToken()) {
+            logger.debug("Loaded persisted token")
             // Check if token is expired or about to expire (within 5 minutes)
             val currentToken = tokenData
             if (currentToken != null) {
@@ -63,10 +68,12 @@ object Auth {
                 if (currentToken.expiresAt > now + 300) {
                     // Token is still valid, verify it works
                     if (validateToken()) {
+                        logger.info("Using valid persisted token")
                         return
                     }
                 }
                 // Token expired or invalid, try to refresh
+                logger.debug("Token expired or invalid, attempting refresh")
                 if (tryRefreshToken()) {
                     return
                 }
@@ -74,6 +81,7 @@ object Auth {
         }
 
         // Need to do full OAuth flow
+        logger.info("Starting OAuth flow")
         performOAuthFlow()
     }
 
@@ -97,7 +105,7 @@ object Auth {
                 false
             }
         } catch (e: Exception) {
-            System.err.println("Failed to load persisted token: ${e.message}")
+            logger.warn("Failed to load persisted token: {}", e.message)
             false
         }
     }
@@ -108,7 +116,7 @@ object Auth {
                 TOKEN_FILE.writeText(jsonConfig.encodeToString(data))
             }
         } catch (e: Exception) {
-            System.err.println("Failed to persist token: ${e.message}")
+            logger.error("Failed to persist token: {}", e.message)
         }
     }
 
@@ -120,7 +128,7 @@ object Auth {
             }
             response.status == HttpStatusCode.OK
         } catch (e: Exception) {
-            System.err.println("Token validation failed: ${e.message}")
+            logger.debug("Token validation failed: {}", e.message)
             false
         }
     }
@@ -143,13 +151,14 @@ object Auth {
 
             if (response.status == HttpStatusCode.OK) {
                 parseAndStoreToken(response.bodyAsText())
+                logger.info("Token refreshed successfully")
                 true
             } else {
-                System.err.println("Token refresh failed with status: ${response.status}")
+                logger.warn("Token refresh failed with status: {}", response.status)
                 false
             }
         } catch (e: Exception) {
-            System.err.println("Token refresh error: ${e.message}")
+            logger.warn("Token refresh error: {}", e.message)
             false
         }
     }
@@ -261,9 +270,9 @@ object Auth {
         if (canOpenBrowser) {
             try {
                 Desktop.getDesktop().browse(URI(url))
-                println("Browser opened for authorization. Please complete the login.")
+                logger.info("Browser opened for authorization")
             } catch (e: Exception) {
-                System.err.println("Failed to open browser: ${e.message}")
+                logger.warn("Failed to open browser: {}", e.message)
                 printManualAuthInstructions(url)
             }
         } else {
@@ -272,14 +281,8 @@ object Auth {
     }
 
     private fun printManualAuthInstructions(url: String) {
-        println()
-        println("=".repeat(60))
-        println("Please open the following URL in your browser to authorize:")
-        println()
-        println(url)
-        println()
-        println("=".repeat(60))
-        println()
+        logger.info("Please open the following URL in your browser to authorize:")
+        logger.info(url)
     }
 
     /**
@@ -290,9 +293,10 @@ object Auth {
         try {
             if (TOKEN_FILE.exists()) {
                 TOKEN_FILE.delete()
+                logger.info("Tokens cleared successfully")
             }
         } catch (e: Exception) {
-            System.err.println("Failed to delete token file: ${e.message}")
+            logger.error("Failed to delete token file: {}", e.message)
         }
     }
 
@@ -302,5 +306,6 @@ object Auth {
     fun close() {
         httpClient?.close()
         httpClient = null
+        logger.debug("Auth resources closed")
     }
 }

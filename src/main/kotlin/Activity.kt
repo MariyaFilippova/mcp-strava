@@ -5,6 +5,9 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("strava.Activity")
 
 val activities = mutableListOf<Activity>()
 
@@ -80,8 +83,11 @@ suspend fun getRecentActivities(count: Int = 10): List<Activity> {
     val url = "https://www.strava.com/api/v3/activities?per_page=$count"
     val response = performGetRequest(url) ?: return emptyList()
     return try {
-        jsonConfig.decodeFromString<List<Activity>>(response)
-    } catch (_: Exception) {
+        val activities = jsonConfig.decodeFromString<List<Activity>>(response)
+        logger.debug("Fetched {} activities", activities.size)
+        activities
+    } catch (e: Exception) {
+        logger.error("Failed to parse activities: {}", e.message)
         emptyList()
     }
 }
@@ -110,8 +116,11 @@ suspend fun getActivitiesInRange(afterTimestamp: Long, beforeTimestamp: Long? = 
     }
     val response = performGetRequest(url) ?: return emptyList()
     return try {
-        jsonConfig.decodeFromString<List<Activity>>(response)
-    } catch (_: Exception) {
+        val activities = jsonConfig.decodeFromString<List<Activity>>(response)
+        logger.debug("Fetched {} activities in date range", activities.size)
+        activities
+    } catch (e: Exception) {
+        logger.error("Failed to parse activities in range: {}", e.message)
         emptyList()
     }
 }
@@ -179,13 +188,16 @@ data class ActivitySummary(
 }
 
 suspend fun performGetRequest(url: String): String? {
+    logger.debug("GET {}", url)
     val response = httpClient.get(url) {
         header("Authorization", "Bearer ${Auth.TOKEN}")
         accept(ContentType.Application.Json)
     }
     if (response.status == HttpStatusCode.OK) {
+        logger.debug("Request successful: {}", response.status)
         return response.bodyAsText()
     }
+    logger.warn("Request failed: {} for URL {}", response.status, url)
     return null
 }
 
