@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "org.example"
-version = "0.1.0"
+version = "0.2.0"
 
 
 application {
@@ -20,11 +20,16 @@ tasks.shadowJar {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-mcp-sdk:0.1.0")
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.8.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.6.0")
     implementation("org.slf4j:slf4j-nop:2.0.9")
+    implementation("io.ktor:ktor-client-core:3.0.2")
+    implementation("io.ktor:ktor-client-cio:3.0.2")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.2")
-    implementation("io.ktor:ktor-client-json:3.0.2")
-    implementation("com.github.dotenv-org:dotenv-vault-kotlin:0.0.2")
+    implementation("io.ktor:ktor-server-core:3.0.2")
+    implementation("io.ktor:ktor-server-cio:3.0.2")
+    implementation("io.github.cdimascio:dotenv-kotlin:6.4.2")
     testImplementation(kotlin("test"))
 }
 

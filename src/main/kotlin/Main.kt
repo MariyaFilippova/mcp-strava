@@ -1,20 +1,24 @@
-import kotlinx.coroutines.CompletableDeferred
+import io.modelcontextprotocol.kotlin.sdk.server.Server
+import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
+import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlinx.mcp.*
-import org.jetbrains.kotlinx.mcp.server.Server
-import org.jetbrains.kotlinx.mcp.server.ServerOptions
-import org.jetbrains.kotlinx.mcp.server.StdioServerTransport
-
+import kotlinx.io.asSink
+import kotlinx.io.asSource
+import kotlinx.io.buffered
 
 fun main() {
     val server = configureServer()
-    val transport = StdioServerTransport()
+    val transport = StdioServerTransport(System.`in`.asSource().buffered(), System.out.asSink().buffered())
 
     runBlocking {
-        server.connect(transport)
+        server.createSession(transport)
         val done = Job()
-        server.onCloseCallback = {
+        server.onClose {
             done.complete()
         }
         done.join()
@@ -22,12 +26,10 @@ fun main() {
 }
 
 fun configureServer(): Server {
-    val def = CompletableDeferred<Unit>()
-
     val server = Server(
         Implementation(
             name = "strava mcp server",
-            version = "1.0.0"
+            version = "2.0.0"
         ),
         ServerOptions(
             capabilities = ServerCapabilities(
@@ -35,32 +37,26 @@ fun configureServer(): Server {
                 resources = ServerCapabilities.Resources(subscribe = true, listChanged = true),
                 tools = ServerCapabilities.Tools(listChanged = true),
             )
-        ),
-        onCloseCallback = {
-            def.complete(Unit)
-        }
+        )
     )
 
     server.addTool(
         name = "auth_strava",
-        description = "Authorised in Strava",
-        inputSchema = Tool.Input()
-    ) { request ->
+        description = "Authorize with Strava"
+    ) { _ ->
         Auth.auth()
         val athlete = getAthlete()
-        return@addTool CallToolResult(content = listOf(TextContent(athlete!!.getAllInfo())))
+            ?: return@addTool CallToolResult(content = listOf(TextContent("Failed to get athlete information")))
+        return@addTool CallToolResult(content = listOf(TextContent(athlete.getAllInfo())))
     }
 
     server.addTool(
         name = "last_activity",
-        description = "Analyze last strava activity",
-        inputSchema = Tool.Input()
-    ) { request ->
+        description = "Analyze last strava activity"
+    ) { _ ->
         try {
-            val activity = getLastActivity()
-            if (activity == null) {
-                return@addTool CallToolResult(content = listOf(TextContent("No last activity")))
-            }
+            val activity =
+                getLastActivity() ?: return@addTool CallToolResult(content = listOf(TextContent("No last activity")))
             return@addTool CallToolResult(content = listOf(TextContent(activity.getAllInfo())))
         } catch (e: Exception) {
             return@addTool CallToolResult(
@@ -69,17 +65,21 @@ fun configureServer(): Server {
         }
     }
 
-
     server.addTool(
         name = "get_streams",
-        description = "returns dynamics of heart rate/distance",
-        inputSchema = Tool.Input()
-    ) { request ->
-        val activity = getLastActivity()
-        if (activity == null) {
-            return@addTool CallToolResult(content = listOf(TextContent("No last activity")))
+        description = "Returns dynamics of heart rate/distance for the last activity"
+    ) { _ ->
+        try {
+            val activity =
+                getLastActivity() ?: return@addTool CallToolResult(content = listOf(TextContent("No last activity")))
+            val streams = getActivityStreams(activity.id)
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Failed to get activity streams")))
+            return@addTool CallToolResult(content = listOf(TextContent(streams)))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(
+                content = listOf(TextContent("An error occurred: ${e.message}"))
+            )
         }
-        return@addTool CallToolResult(content = listOf(TextContent(getActivityStreams(activity.id))))
     }
 
     return server

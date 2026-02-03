@@ -3,7 +3,7 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import io.ktor.server.cio.*
+import io.ktor.server.cio.CIO
 import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -31,8 +31,10 @@ object Auth {
     suspend fun auth() {
         if (TOKEN != null) return
         val dotenv = Dotenv.configure().load()
-        CLIENT_ID = dotenv.get("CLIENT_ID")!!
-        CLIENT_SECRET = dotenv.get("CLIENT_SECRET")!!
+        CLIENT_ID = dotenv.get("CLIENT_ID")
+            ?: throw IllegalStateException("CLIENT_ID not found in .env file. Please add your Strava API client ID.")
+        CLIENT_SECRET = dotenv.get("CLIENT_SECRET")
+            ?: throw IllegalStateException("CLIENT_SECRET not found in .env file. Please add your Strava API client secret.")
         openAuthorizationUrl(CLIENT_ID!!)
         val deferredToken = CompletableDeferred<String?>()
         val serverJob = CoroutineScope(Dispatchers.IO).launch { startServer(deferredToken) }

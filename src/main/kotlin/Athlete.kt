@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 data class Athlete(
     val id: Long,
     val username: String? = null,
-    val resource_state: Int,
+    val resourceState: Int,
     val firstname: String,
     val lastname: String,
     val city: String? = null,
@@ -13,10 +13,10 @@ data class Athlete(
     val sex: String? = null,
     val premium: Boolean,
     val follower: Int? = null,
-    val follower_count: Int,
-    val athlete_type: Int? = null,
+    val followerCount: Int,
+    val athleteType: Int? = null,
     val ftp: Int? = null,
-    val weight: Double,
+    val weight: Double? = null,
 )
 
 /**
@@ -53,11 +53,11 @@ fun Athlete.getAllInfo(): String {
         ----------------
         Username: ${username ?: "N/A"}
         Name: $firstname $lastname
-        Resource State: $resource_state
+        Resource State: $resourceState
         Location: ${city ?: "N/A"}, ${state ?: "N/A"}, ${country ?: "N/A"}
         Sex: ${sex ?: "N/A"}
         Premium User: $premium
-        Followers: $follower_count
-        Weight: ${"%.1f".format(weight)} kg
+        Followers: $followerCount
+        Weight: ${weight?.let { "%.1f".format(it) } ?: "N/A"} kg
     """.trimIndent()
 }
