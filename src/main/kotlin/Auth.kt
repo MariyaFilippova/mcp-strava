@@ -7,70 +7,214 @@ import io.ktor.server.cio.CIO
 import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import java.awt.Desktop
+import java.awt.GraphicsEnvironment
+import java.io.File
 import java.net.URI
+
+@Serializable
+data class TokenData(
+    val accessToken: String,
+    val refreshToken: String,
+    val expiresAt: Long
+)
 
 object Auth {
     private const val AUTHORIZE_URL = "https://www.strava.com/oauth/mobile/authorize"
     private const val TOKEN_URL = "https://www.strava.com/oauth/token"
+    private const val AUTH_PORT = 3008
+    private const val AUTH_TIMEOUT_MS = 120_000L // 2 minutes timeout for user to complete auth
+    private val TOKEN_FILE = File(System.getProperty("user.home"), ".strava-mcp-token.json")
 
-    private var CLIENT_ID : String? = null
-    private var CLIENT_SECRET: String? = null
+    private var clientId: String? = null
+    private var clientSecret: String? = null
+    private var tokenData: TokenData? = null
 
-    var TOKEN: String? = null
+    val TOKEN: String?
+        get() = tokenData?.accessToken
 
-    private val httpClient = HttpClient(io.ktor.client.engine.cio.CIO)
-
-    suspend fun auth() {
-        if (TOKEN != null) return
-        val dotenv = Dotenv.configure().load()
-        CLIENT_ID = dotenv.get("CLIENT_ID")
-            ?: throw IllegalStateException("CLIENT_ID not found in .env file. Please add your Strava API client ID.")
-        CLIENT_SECRET = dotenv.get("CLIENT_SECRET")
-            ?: throw IllegalStateException("CLIENT_SECRET not found in .env file. Please add your Strava API client secret.")
-        openAuthorizationUrl(CLIENT_ID!!)
-        val deferredToken = CompletableDeferred<String?>()
-        val serverJob = CoroutineScope(Dispatchers.IO).launch { startServer(deferredToken) }
-        TOKEN = deferredToken.await()
-        serverJob.cancel()
+    private val jsonConfig = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = true
     }
 
-    /**
-     * Start a local HTTP server to handle redirection and authorization exchange.
-     */
-    private fun startServer(deferredToken: CompletableDeferred<String?>) {
-        embeddedServer(CIO, port = 3008) {
+    private var httpClient: HttpClient? = null
+
+    private fun getHttpClient(): HttpClient {
+        if (httpClient == null) {
+            httpClient = HttpClient(io.ktor.client.engine.cio.CIO)
+        }
+        return httpClient!!
+    }
+
+    suspend fun auth() {
+        loadCredentials()
+
+        // Try to load existing token
+        if (tryLoadPersistedToken()) {
+            // Check if token is expired or about to expire (within 5 minutes)
+            val currentToken = tokenData
+            if (currentToken != null) {
+                val now = System.currentTimeMillis() / 1000
+                if (currentToken.expiresAt > now + 300) {
+                    // Token is still valid, verify it works
+                    if (validateToken()) {
+                        return
+                    }
+                }
+                // Token expired or invalid, try to refresh
+                if (tryRefreshToken()) {
+                    return
+                }
+            }
+        }
+
+        // Need to do full OAuth flow
+        performOAuthFlow()
+    }
+
+    private fun loadCredentials() {
+        if (clientId != null && clientSecret != null) return
+
+        val dotenv = Dotenv.configure().load()
+        clientId = dotenv.get("CLIENT_ID")
+            ?: throw IllegalStateException("CLIENT_ID not found in .env file. Please add your Strava API client ID.")
+        clientSecret = dotenv.get("CLIENT_SECRET")
+            ?: throw IllegalStateException("CLIENT_SECRET not found in .env file. Please add your Strava API client secret.")
+    }
+
+    private fun tryLoadPersistedToken(): Boolean {
+        return try {
+            if (TOKEN_FILE.exists()) {
+                val content = TOKEN_FILE.readText()
+                tokenData = jsonConfig.decodeFromString<TokenData>(content)
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            System.err.println("Failed to load persisted token: ${e.message}")
+            false
+        }
+    }
+
+    private fun persistToken() {
+        try {
+            tokenData?.let { data ->
+                TOKEN_FILE.writeText(jsonConfig.encodeToString(data))
+            }
+        } catch (e: Exception) {
+            System.err.println("Failed to persist token: ${e.message}")
+        }
+    }
+
+    private suspend fun validateToken(): Boolean {
+        return try {
+            val response = getHttpClient().get("https://www.strava.com/api/v3/athlete") {
+                header("Authorization", "Bearer ${tokenData?.accessToken}")
+                accept(ContentType.Application.Json)
+            }
+            response.status == HttpStatusCode.OK
+        } catch (e: Exception) {
+            System.err.println("Token validation failed: ${e.message}")
+            false
+        }
+    }
+
+    private suspend fun tryRefreshToken(): Boolean {
+        val currentToken = tokenData ?: return false
+
+        return try {
+            val response = getHttpClient().post(TOKEN_URL) {
+                header(HttpHeaders.ContentType, ContentType.Application.FormUrlEncoded)
+                setBody(
+                    listOf(
+                        "client_id" to clientId,
+                        "client_secret" to clientSecret,
+                        "grant_type" to "refresh_token",
+                        "refresh_token" to currentToken.refreshToken
+                    ).formUrlEncode()
+                )
+            }
+
+            if (response.status == HttpStatusCode.OK) {
+                parseAndStoreToken(response.bodyAsText())
+                true
+            } else {
+                System.err.println("Token refresh failed with status: ${response.status}")
+                false
+            }
+        } catch (e: Exception) {
+            System.err.println("Token refresh error: ${e.message}")
+            false
+        }
+    }
+
+    private suspend fun performOAuthFlow() {
+        openAuthorizationUrl()
+
+        val result = CompletableDeferred<Result<TokenData>>()
+        val server = startServer(result)
+
+        try {
+            withTimeout(AUTH_TIMEOUT_MS) {
+                val tokenResult = result.await()
+                tokenResult.getOrElse { error ->
+                    throw error
+                }
+            }
+        } catch (_: TimeoutCancellationException) {
+            throw IllegalStateException("Authentication timed out. Please try again and complete the authorization within 2 minutes.")
+        } finally {
+            server.stop(1000, 2000)
+        }
+    }
+
+    private fun startServer(result: CompletableDeferred<Result<TokenData>>): EmbeddedServer<*, *> {
+        val server = embeddedServer(CIO, port = AUTH_PORT) {
             routing {
                 get("/exchange_token") {
                     val code = call.request.queryParameters["code"]
-                    if (code != null) {
-                        call.respondText("Authorization successful! You can close this tab.")
-                        CoroutineScope(Dispatchers.IO).launch { exchangeToken(code, deferredToken) }
-                    } else {
-                        call.respondText("Authorization failed!", status = HttpStatusCode.BadRequest)
+                    val error = call.request.queryParameters["error"]
+
+                    when {
+                        error != null -> {
+                            call.respondText("Authorization denied: $error", status = HttpStatusCode.BadRequest)
+                            result.complete(Result.failure(IllegalStateException("User denied authorization: $error")))
+                        }
+                        code != null -> {
+                            call.respondText("Authorization successful! You can close this tab.")
+                            // Exchange token in the same coroutine context
+                            try {
+                                exchangeToken(code)
+                                result.complete(Result.success(tokenData!!))
+                            } catch (e: Exception) {
+                                result.complete(Result.failure(e))
+                            }
+                        }
+                        else -> {
+                            call.respondText("Missing authorization code", status = HttpStatusCode.BadRequest)
+                            result.complete(Result.failure(IllegalStateException("No authorization code received")))
+                        }
                     }
                 }
             }
-        }.start(wait = true)
+        }
+        server.start(wait = false)
+        return server
     }
 
-    /**
-     * Exchange the authorization code for an access token.
-     */
-    private suspend fun exchangeToken(code: String, deferredToken: CompletableDeferred<String?>) {
-        val response = httpClient.post(TOKEN_URL) {
+    private suspend fun exchangeToken(code: String) {
+        val response = getHttpClient().post(TOKEN_URL) {
             header(HttpHeaders.ContentType, ContentType.Application.FormUrlEncoded)
             setBody(
                 listOf(
-                    "client_id" to CLIENT_ID,
-                    "client_secret" to CLIENT_SECRET,
+                    "client_id" to clientId,
+                    "client_secret" to clientSecret,
                     "code" to code,
                     "grant_type" to "authorization_code"
                 ).formUrlEncode()
@@ -78,23 +222,85 @@ object Auth {
         }
 
         if (response.status == HttpStatusCode.OK) {
-            val responseBody = response.bodyAsText()
-            val jsonObject = Json.parseToJsonElement(responseBody).jsonObject
-            TOKEN = (jsonObject["access_token"] as? JsonPrimitive)?.content
-            deferredToken.complete(TOKEN)
+            parseAndStoreToken(response.bodyAsText())
         } else {
-            deferredToken.complete(null)
+            val errorBody = response.bodyAsText()
+            throw IllegalStateException("Token exchange failed (${response.status}): $errorBody")
+        }
+    }
+
+    private fun parseAndStoreToken(responseBody: String) {
+        val json = Json.parseToJsonElement(responseBody).jsonObject
+
+        val accessToken = json["access_token"]?.toString()?.removeSurrounding("\"")
+            ?: throw IllegalStateException("No access_token in response")
+        val refreshToken = json["refresh_token"]?.toString()?.removeSurrounding("\"")
+            ?: throw IllegalStateException("No refresh_token in response")
+        val expiresAt = json["expires_at"]?.toString()?.toLongOrNull()
+            ?: throw IllegalStateException("No expires_at in response")
+
+        tokenData = TokenData(
+            accessToken = accessToken,
+            refreshToken = refreshToken,
+            expiresAt = expiresAt
+        )
+        persistToken()
+    }
+
+    private fun openAuthorizationUrl() {
+        val redirectUri = "http://127.0.0.1:$AUTH_PORT/exchange_token"
+        val scopes = "read_all,activity:read,activity:read_all,profile:read_all"
+        val url = "$AUTHORIZE_URL?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&approval_prompt=force&scope=$scopes"
+
+        val canOpenBrowser = try {
+            !GraphicsEnvironment.isHeadless() && Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)
+        } catch (_: Exception) {
+            false
+        }
+
+        if (canOpenBrowser) {
+            try {
+                Desktop.getDesktop().browse(URI(url))
+                println("Browser opened for authorization. Please complete the login.")
+            } catch (e: Exception) {
+                System.err.println("Failed to open browser: ${e.message}")
+                printManualAuthInstructions(url)
+            }
+        } else {
+            printManualAuthInstructions(url)
+        }
+    }
+
+    private fun printManualAuthInstructions(url: String) {
+        println()
+        println("=".repeat(60))
+        println("Please open the following URL in your browser to authorize:")
+        println()
+        println(url)
+        println()
+        println("=".repeat(60))
+        println()
+    }
+
+    /**
+     * Clear stored tokens (useful for testing or forcing re-auth)
+     */
+    fun clearTokens() {
+        tokenData = null
+        try {
+            if (TOKEN_FILE.exists()) {
+                TOKEN_FILE.delete()
+            }
+        } catch (e: Exception) {
+            System.err.println("Failed to delete token file: ${e.message}")
         }
     }
 
     /**
-     * Open the authorization URL in the default browser or display the link in the log.
+     * Close resources when shutting down
      */
-    fun openAuthorizationUrl(clientId: String, port: Int = 3008) {
-        val redirectUri = "http://127.0.0.1:$port/exchange_token"
-        val scopes = "read_all,activity:read,activity:read_all,profile:read_all"
-        val url =
-            "$AUTHORIZE_URL?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&approval_prompt=force&scope=$scopes"
-        Desktop.getDesktop().browse(URI(url))
+    fun close() {
+        httpClient?.close()
+        httpClient = null
     }
 }

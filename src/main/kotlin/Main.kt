@@ -23,6 +23,7 @@ fun main() {
         }
         done.join()
     }
+    Auth.close()
 }
 
 fun configureServer(): Server {
@@ -168,6 +169,14 @@ fun configureServer(): Server {
         } catch (e: Exception) {
             return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
         }
+    }
+
+    server.addTool(
+        name = "logout",
+        description = "Clear stored Strava authentication tokens. Use this to switch accounts or fix authentication issues."
+    ) { _ ->
+        Auth.clearTokens()
+        return@addTool CallToolResult(content = listOf(TextContent("Logged out successfully. Stored tokens have been cleared. Use auth_strava to log in again.")))
     }
 
     return server
