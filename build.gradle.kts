@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "org.example"
-version = "0.2.0"
+version = "2.0.0"
 
 
 application {
@@ -15,7 +15,7 @@ application {
 
 tasks.shadowJar {
     archiveBaseName.set("strava-mcp-server")
-    archiveVersion.set("1.0.0")
+    archiveVersion.set("2.0.0")
     mergeServiceFiles()
 }
 
