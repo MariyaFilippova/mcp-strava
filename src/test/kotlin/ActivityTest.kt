@@ -203,4 +203,23 @@ class ActivityTest {
 
         assertContains(formatted, "2h 3m")
     }
+
+    @Test
+    fun `month timestamp calculation is correct for January`() {
+        val startOfJan2025 = java.time.LocalDate.of(2025, 1, 1)
+            .atStartOfDay(java.time.ZoneOffset.UTC)
+            .toEpochSecond()
+
+        // January 1, 2025 00:00:00 UTC = 1735689600
+        assertEquals(1735689600L, startOfJan2025)
+    }
+
+    @Test
+    fun `month timestamp calculation is correct for February leap year`() {
+        val daysInFeb2024 = java.time.YearMonth.of(2024, 2).lengthOfMonth()
+        assertEquals(29, daysInFeb2024) // 2024 is a leap year
+
+        val daysInFeb2025 = java.time.YearMonth.of(2025, 2).lengthOfMonth()
+        assertEquals(28, daysInFeb2025) // 2025 is not a leap year
+    }
 }

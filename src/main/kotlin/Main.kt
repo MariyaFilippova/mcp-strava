@@ -179,6 +179,108 @@ fun configureServer(): Server {
     }
 
     server.addTool(
+        name = "month_summary",
+        description = "Get activity summary for a specific month. Requires 'year' (e.g., 2025) and 'month' (1-12) parameters."
+    ) { request ->
+        try {
+            val year = request.arguments?.get("year")?.toString()?.removeSurrounding("\"")?.toIntOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide a 'year' parameter (e.g., 2025)")))
+            val month = request.arguments?.get("month")?.toString()?.removeSurrounding("\"")?.toIntOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide a 'month' parameter (1-12)")))
+
+            if (month !in 1..12) {
+                return@addTool CallToolResult(content = listOf(TextContent("Month must be between 1 and 12")))
+            }
+
+            val activities = getActivitiesForMonth(year, month)
+            if (activities.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No activities found for $month/$year")))
+            }
+            val summary = calculateSummary(activities)
+            val monthName = java.time.Month.of(month).name.lowercase().replaceFirstChar { it.uppercase() }
+            return@addTool CallToolResult(content = listOf(TextContent("$monthName $year Summary\n${summary.format()}")))
+        } catch (e: Exception) {
+            logger.error("Error getting month summary: {}", e.message)
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "compare_months",
+        description = "Compare activities between two months. Requires 'year1', 'month1', 'year2', 'month2' parameters. Example: compare January 2025 with January 2026."
+    ) { request ->
+        try {
+            val year1 = request.arguments?.get("year1")?.toString()?.removeSurrounding("\"")?.toIntOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide 'year1' parameter")))
+            val month1 = request.arguments?.get("month1")?.toString()?.removeSurrounding("\"")?.toIntOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide 'month1' parameter (1-12)")))
+            val year2 = request.arguments?.get("year2")?.toString()?.removeSurrounding("\"")?.toIntOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide 'year2' parameter")))
+            val month2 = request.arguments?.get("month2")?.toString()?.removeSurrounding("\"")?.toIntOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide 'month2' parameter (1-12)")))
+
+            if (month1 !in 1..12 || month2 !in 1..12) {
+                return@addTool CallToolResult(content = listOf(TextContent("Months must be between 1 and 12")))
+            }
+
+            val activities1 = getActivitiesForMonth(year1, month1)
+            val activities2 = getActivitiesForMonth(year2, month2)
+
+            val summary1 = calculateSummary(activities1)
+            val summary2 = calculateSummary(activities2)
+
+            val month1Name = java.time.Month.of(month1).name.lowercase().replaceFirstChar { it.uppercase() }
+            val month2Name = java.time.Month.of(month2).name.lowercase().replaceFirstChar { it.uppercase() }
+
+            val distanceDiff = summary2.totalDistance - summary1.totalDistance
+            val timeDiff = summary2.totalMovingTime - summary1.totalMovingTime
+            val elevationDiff = summary2.totalElevation - summary1.totalElevation
+            val activityDiff = summary2.activityCount - summary1.activityCount
+
+            fun formatDiff(value: Double, unit: String): String {
+                val sign = if (value >= 0) "+" else ""
+                return "$sign${"%.1f".format(value)} $unit"
+            }
+
+            fun formatTimeDiff(seconds: Int): String {
+                val sign = if (seconds >= 0) "+" else "-"
+                val absSeconds = kotlin.math.abs(seconds)
+                val hours = absSeconds / 3600
+                val minutes = (absSeconds % 3600) / 60
+                return "$sign${hours}h ${minutes}m"
+            }
+
+            val result = buildString {
+                appendLine("Comparison: $month1Name $year1 vs $month2Name $year2")
+                appendLine("=".repeat(50))
+                appendLine()
+                appendLine("$month1Name $year1:")
+                appendLine("  Activities: ${summary1.activityCount}")
+                appendLine("  Distance: ${"%.1f".format(summary1.totalDistance / 1000)} km")
+                appendLine("  Time: ${summary1.totalMovingTime / 3600}h ${(summary1.totalMovingTime % 3600) / 60}m")
+                appendLine("  Elevation: ${"%.0f".format(summary1.totalElevation)} m")
+                appendLine()
+                appendLine("$month2Name $year2:")
+                appendLine("  Activities: ${summary2.activityCount}")
+                appendLine("  Distance: ${"%.1f".format(summary2.totalDistance / 1000)} km")
+                appendLine("  Time: ${summary2.totalMovingTime / 3600}h ${(summary2.totalMovingTime % 3600) / 60}m")
+                appendLine("  Elevation: ${"%.0f".format(summary2.totalElevation)} m")
+                appendLine()
+                appendLine("Difference ($month2Name $year2 vs $month1Name $year1):")
+                appendLine("  Activities: ${if (activityDiff >= 0) "+" else ""}$activityDiff")
+                appendLine("  Distance: ${formatDiff(distanceDiff / 1000, "km")}")
+                appendLine("  Time: ${formatTimeDiff(timeDiff)}")
+                appendLine("  Elevation: ${formatDiff(elevationDiff, "m")}")
+            }
+
+            return@addTool CallToolResult(content = listOf(TextContent(result)))
+        } catch (e: Exception) {
+            logger.error("Error comparing months: {}", e.message)
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
         name = "logout",
         description = "Clear stored Strava authentication tokens. Use this to switch accounts or fix authentication issues."
     ) { _ ->

@@ -104,6 +104,22 @@ suspend fun getActivitiesByType(sportType: String, count: Int = 10): List<Activi
 }
 
 /**
+ * Get activities for a specific month and year.
+ * @param year The year (e.g., 2025)
+ * @param month The month (1-12)
+ */
+suspend fun getActivitiesForMonth(year: Int, month: Int): List<Activity> {
+    val startOfMonth = java.time.LocalDate.of(year, month, 1)
+        .atStartOfDay(java.time.ZoneOffset.UTC)
+        .toEpochSecond()
+    val endOfMonth = startOfMonth + (startOfMonth.let {
+        java.time.YearMonth.of(year, month).lengthOfMonth() * 24 * 60 * 60L
+    })
+    logger.debug("Fetching activities for {}/{} (timestamps: {} to {})", month, year, startOfMonth, endOfMonth)
+    return getActivitiesInRange(startOfMonth, endOfMonth)
+}
+
+/**
  * Get activities within a date range (for weekly/monthly summaries).
  * @param afterTimestamp Unix timestamp for start date
  * @param beforeTimestamp Unix timestamp for end date (optional)
