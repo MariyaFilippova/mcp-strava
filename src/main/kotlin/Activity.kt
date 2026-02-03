@@ -72,6 +72,112 @@ suspend fun getActivityStreams(id: Long): String? {
     return performGetRequest(url)
 }
 
+/**
+ * Fetch recent activities with configurable count.
+ */
+suspend fun getRecentActivities(count: Int = 10): List<Activity> {
+    Auth.auth()
+    val url = "https://www.strava.com/api/v3/activities?per_page=$count"
+    val response = performGetRequest(url) ?: return emptyList()
+    return try {
+        jsonConfig.decodeFromString<List<Activity>>(response)
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+/**
+ * Fetch activities filtered by sport type.
+ */
+suspend fun getActivitiesByType(sportType: String, count: Int = 10): List<Activity> {
+    val allActivities = getRecentActivities(count * 3) // fetch more to filter
+    return allActivities.filter {
+        it.sport_type.equals(sportType, ignoreCase = true) ||
+        it.type.equals(sportType, ignoreCase = true)
+    }.take(count)
+}
+
+/**
+ * Get activities within a date range (for weekly/monthly summaries).
+ * @param afterTimestamp Unix timestamp for start date
+ * @param beforeTimestamp Unix timestamp for end date (optional)
+ */
+suspend fun getActivitiesInRange(afterTimestamp: Long, beforeTimestamp: Long? = null): List<Activity> {
+    Auth.auth()
+    var url = "https://www.strava.com/api/v3/activities?per_page=100&after=$afterTimestamp"
+    if (beforeTimestamp != null) {
+        url += "&before=$beforeTimestamp"
+    }
+    val response = performGetRequest(url) ?: return emptyList()
+    return try {
+        jsonConfig.decodeFromString<List<Activity>>(response)
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+/**
+ * Calculate summary statistics for a list of activities.
+ */
+fun calculateSummary(activities: List<Activity>): ActivitySummary {
+    val totalDistance = activities.sumOf { it.distance }
+    val totalMovingTime = activities.sumOf { it.moving_time }
+    val totalElevation = activities.sumOf { it.total_elevation_gain }
+    val byType = activities.groupBy { it.sport_type }
+
+    return ActivitySummary(
+        activityCount = activities.size,
+        totalDistance = totalDistance,
+        totalMovingTime = totalMovingTime,
+        totalElevation = totalElevation,
+        byType = byType.mapValues { (_, acts) ->
+            TypeSummary(
+                count = acts.size,
+                distance = acts.sumOf { it.distance },
+                movingTime = acts.sumOf { it.moving_time },
+                elevation = acts.sumOf { it.total_elevation_gain }
+            )
+        }
+    )
+}
+
+data class TypeSummary(
+    val count: Int,
+    val distance: Double,
+    val movingTime: Int,
+    val elevation: Double
+)
+
+data class ActivitySummary(
+    val activityCount: Int,
+    val totalDistance: Double,
+    val totalMovingTime: Int,
+    val totalElevation: Double,
+    val byType: Map<String, TypeSummary>
+) {
+    fun format(): String {
+        val hours = totalMovingTime / 3600
+        val minutes = (totalMovingTime % 3600) / 60
+
+        val sb = StringBuilder()
+        sb.appendLine("Activity Summary")
+        sb.appendLine("================")
+        sb.appendLine("Total Activities: $activityCount")
+        sb.appendLine("Total Distance: ${"%.2f".format(totalDistance / 1000)} km")
+        sb.appendLine("Total Moving Time: ${hours}h ${minutes}m")
+        sb.appendLine("Total Elevation Gain: ${"%.0f".format(totalElevation)} m")
+        sb.appendLine()
+        sb.appendLine("By Activity Type:")
+        sb.appendLine("-----------------")
+        byType.forEach { (type, summary) ->
+            val typeHours = summary.movingTime / 3600
+            val typeMinutes = (summary.movingTime % 3600) / 60
+            sb.appendLine("$type: ${summary.count} activities, ${"%.2f".format(summary.distance / 1000)} km, ${typeHours}h ${typeMinutes}m")
+        }
+        return sb.toString()
+    }
+}
+
 suspend fun performGetRequest(url: String): String? {
     val response = httpClient.get(url) {
         header("Authorization", "Bearer ${Auth.TOKEN}")

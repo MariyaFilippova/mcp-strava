@@ -82,5 +82,93 @@ fun configureServer(): Server {
         }
     }
 
+    server.addTool(
+        name = "recent_activities",
+        description = "Get a list of recent Strava activities. Returns up to 10 most recent activities with their details."
+    ) { _ ->
+        try {
+            val activities = getRecentActivities(10)
+            if (activities.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No activities found")))
+            }
+            val result = activities.mapIndexed { index, activity ->
+                "${index + 1}. ${activity.name} (${activity.sport_type}) - ${"%.2f".format(activity.distance / 1000)} km on ${activity.start_date_local}"
+            }.joinToString("\n")
+            return@addTool CallToolResult(content = listOf(TextContent("Recent Activities:\n$result")))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "athlete_stats",
+        description = "Get all-time athlete statistics including total distance, time, and elevation for rides, runs, and swims. Shows recent (4 weeks), year-to-date, and all-time totals."
+    ) { _ ->
+        try {
+            Auth.auth()
+            val athlete = getAthlete()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Failed to get athlete")))
+            val stats = getAthleteStats(athlete.id)
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Failed to get athlete stats")))
+            return@addTool CallToolResult(content = listOf(TextContent(stats.format())))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "activities_by_type",
+        description = "Get recent activities filtered by sport type. Supports: Run, Ride, Swim, Walk, Hike, TrailRun, VirtualRide, VirtualRun, Workout, WeightTraining, Yoga"
+    ) { request ->
+        try {
+            val sportType = request.arguments?.get("sport_type")?.toString()?.removeSurrounding("\"")
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide a sport_type parameter (e.g., Run, Ride, Swim)")))
+            val activities = getActivitiesByType(sportType, 10)
+            if (activities.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No $sportType activities found")))
+            }
+            val result = activities.mapIndexed { index, activity ->
+                "${index + 1}. ${activity.name} - ${"%.2f".format(activity.distance / 1000)} km, ${activity.moving_time / 60} min on ${activity.start_date_local}"
+            }.joinToString("\n")
+            return@addTool CallToolResult(content = listOf(TextContent("Recent $sportType Activities:\n$result")))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "weekly_summary",
+        description = "Get a summary of activities from the past week including total distance, time, elevation, and breakdown by activity type."
+    ) { _ ->
+        try {
+            val oneWeekAgo = System.currentTimeMillis() / 1000 - (7 * 24 * 60 * 60)
+            val activities = getActivitiesInRange(oneWeekAgo)
+            if (activities.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No activities in the past week")))
+            }
+            val summary = calculateSummary(activities)
+            return@addTool CallToolResult(content = listOf(TextContent("Weekly Summary (Last 7 Days)\n${summary.format()}")))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "monthly_summary",
+        description = "Get a summary of activities from the past month including total distance, time, elevation, and breakdown by activity type."
+    ) { _ ->
+        try {
+            val oneMonthAgo = System.currentTimeMillis() / 1000 - (30 * 24 * 60 * 60)
+            val activities = getActivitiesInRange(oneMonthAgo)
+            if (activities.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No activities in the past month")))
+            }
+            val summary = calculateSummary(activities)
+            return@addTool CallToolResult(content = listOf(TextContent("Monthly Summary (Last 30 Days)\n${summary.format()}")))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
     return server
 }
