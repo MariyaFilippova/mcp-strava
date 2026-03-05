@@ -12,7 +12,7 @@ class AthleteTest {
             {
                 "id": 12345,
                 "username": "runner123",
-                "resourceState": 2,
+                "resource_state": 2,
                 "firstname": "John",
                 "lastname": "Doe",
                 "city": "San Francisco",
@@ -20,7 +20,7 @@ class AthleteTest {
                 "country": "United States",
                 "sex": "M",
                 "premium": true,
-                "followerCount": 150,
+                "follower_count": 150,
                 "weight": 75.5
             }
         """.trimIndent()
@@ -42,11 +42,11 @@ class AthleteTest {
         val json = """
             {
                 "id": 99999,
-                "resourceState": 1,
+                "resource_state": 1,
                 "firstname": "Jane",
                 "lastname": "Smith",
                 "premium": false,
-                "followerCount": 50
+                "follower_count": 50
             }
         """.trimIndent()
 

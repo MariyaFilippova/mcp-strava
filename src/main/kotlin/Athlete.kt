@@ -1,20 +1,21 @@
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class Athlete(
     val id: Long,
     val username: String? = null,
-    val resourceState: Int,
+    @SerialName("resource_state") val resourceState: Int = 0,
     val firstname: String,
     val lastname: String,
     val city: String? = null,
     val state: String? = null,
     val country: String? = null,
     val sex: String? = null,
-    val premium: Boolean,
+    val premium: Boolean = false,
     val follower: Int? = null,
-    val followerCount: Int,
-    val athleteType: Int? = null,
+    @SerialName("follower_count") val followerCount: Int = 0,
+    @SerialName("athlete_type") val athleteType: Int? = null,
     val ftp: Int? = null,
     val weight: Double? = null,
 )
