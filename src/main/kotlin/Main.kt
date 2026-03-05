@@ -427,6 +427,7 @@ Parameters:
 - max_segments (Int, optional): Maximum segments to include (1-5). Default: 5."""
     ) { request ->
         try {
+            Auth.auth()
             val startLat = request.arguments?.get("start_lat")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull()
             val startLng = request.arguments?.get("start_lng")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull()
             val startAddress = request.arguments?.get("start_address")?.toString()?.removeSurrounding("\"")
@@ -443,12 +444,15 @@ Parameters:
                 return@addTool CallToolResult(content = listOf(TextContent("Please provide either start_lat + start_lng or start_address")))
             }
 
-            val segments = exploreSegments(lat, lng, radiusKm, activityType)
-            if (segments.isEmpty()) {
+            val exploreResult = exploreSegments(lat, lng, radiusKm, activityType)
+            if (exploreResult.error != null) {
+                return@addTool CallToolResult(content = listOf(TextContent("Segment explore failed: ${exploreResult.error}")))
+            }
+            if (exploreResult.segments.isEmpty()) {
                 return@addTool CallToolResult(content = listOf(TextContent("No segments found near (${"%.4f".format(lat)}, ${"%.4f".format(lng)}). Try increasing radius_km or changing activity_type.")))
             }
 
-            val capped = segments.take(maxSegments)
+            val capped = exploreResult.segments.take(maxSegments)
             val waypoints = orderSegmentsIntoLoop(capped, lat, lng)
             val travelMode = mapActivityTypeToTravelMode(activityType)
             val mapsUrl = buildGoogleMapsUrl(Pair(lat, lng), waypoints, travelMode)

@@ -220,12 +220,17 @@ fun orderSegmentsIntoLoop(
     return waypoints
 }
 
+data class ExploreResult(
+    val segments: List<ExplorerSegment> = emptyList(),
+    val error: String? = null,
+)
+
 suspend fun exploreSegments(
     lat: Double,
     lng: Double,
     radiusKm: Double,
     activityType: String,
-): List<ExplorerSegment> {
+): ExploreResult {
     val bounds = boundsFromCenter(lat, lng, radiusKm)
     val stravaType =
         when (activityType.lowercase()) {
@@ -234,12 +239,22 @@ suspend fun exploreSegments(
         }
     val url = "https://www.strava.com/api/v3/segments/explore?bounds=$bounds&activity_type=$stravaType"
     logger.debug("Segments explore: {}", url)
-    val body = performGetRequest(url) ?: return emptyList()
+
     return try {
-        jsonConfig.decodeFromString<SegmentExploreResponse>(body).segments
+        val response = httpClient.get(url) {
+            header("Authorization", "Bearer ${Auth.TOKEN}")
+            accept(ContentType.Application.Json)
+        }
+        val body = response.bodyAsText()
+        if (response.status != HttpStatusCode.OK) {
+            logger.warn("Segments explore failed: {} - {}", response.status, body)
+            return ExploreResult(error = "Strava API error ${response.status}: $body")
+        }
+        val segments = jsonConfig.decodeFromString<SegmentExploreResponse>(body).segments
+        ExploreResult(segments = segments)
     } catch (e: Exception) {
-        logger.error("Failed to parse segment explore response: {}", e.message)
-        emptyList()
+        logger.error("Segments explore exception: {}", e.message)
+        ExploreResult(error = "Request failed: ${e.message}")
     }
 }
 
