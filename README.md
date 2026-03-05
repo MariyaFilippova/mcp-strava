@@ -1,5 +1,7 @@
 # MCP Strava Server
 
+<img width="830" height="719" alt="Screenshot 2026-03-05 at 15 53 28" src="https://github.com/user-attachments/assets/0655f2d2-5e54-4c6c-b742-05c383c822dd" />
+
 A Model Context Protocol (MCP) server that integrates Strava with Claude for Desktop, enabling AI-powered analysis of your fitness activities.
 
 ## Features
