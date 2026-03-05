@@ -12,6 +12,8 @@ A Model Context Protocol (MCP) server that integrates Strava with Claude for Des
 - **Historical Comparisons** - compare months year-over-year
 - **Statistics** - all-time stats, weekly/monthly summaries
 - **Filtering** - by activity type (Run, Ride, Swim, etc.)
+- **Route Generation** - suggest round-trip routes with a Google Maps link (no API key needed)
+- **Popular Routes** - discover popular Strava segments nearby and get a Google Maps loop through them
 
 ## Available Tools
 
@@ -32,6 +34,8 @@ A Model Context Protocol (MCP) server that integrates Strava with Claude for Des
 | `get_streams` | Heart rate data for last activity |
 | `get_activity_streams` | Full data streams (HR, pace, altitude, cadence, power, GPS, etc.) for any activity |
 | `get_laps` | Lap splits for any activity (distance, time, speed, elevation, HR) |
+| `suggest_route` | Generate a round-trip route and get a Google Maps link for navigation |
+| `popular_routes` | Find popular Strava segments nearby and build a Google Maps route through them |
 
 ## Setup
 
@@ -103,6 +107,10 @@ Once configured, you can ask Claude things like:
 - "Show me the lap splits for activity 123456789"
 - "Analyze the heart rate and elevation data for my last run"
 - "Find all my activities from March 2025"
+- "Suggest a 5km running route starting from Central Park, NYC"
+- "Generate a 10km cycling route from 48.8566, 2.3522"
+- "Find popular running segments near Central Park, NYC"
+- "Show me popular cycling routes within 10km of Paris"
 
 ## Authentication
 

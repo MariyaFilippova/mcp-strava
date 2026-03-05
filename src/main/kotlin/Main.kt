@@ -357,6 +357,126 @@ fun configureServer(): Server {
     }
 
     server.addTool(
+        name = "suggest_route",
+        description = """Generate a round-trip route and return a Google Maps link for navigation. Provide a starting point (lat/lng or address) and desired distance. No API keys required.
+Parameters:
+- start_lat (Double, optional): Starting latitude. Required if start_address is not provided.
+- start_lng (Double, optional): Starting longitude. Required if start_address is not provided.
+- start_address (String, optional): Address to geocode as starting point. Alternative to lat/lng.
+- distance_km (Double, required): Desired route distance in kilometers.
+- activity_type (String, optional): One of: run, walk, hike, trail_run, ride, road_ride, mountain_bike. Default: run.
+- num_points (Int, optional): Number of waypoints in the loop (1-8). Default: 4.
+- seed (Int, optional): Random seed for route variation. Different seeds produce different routes."""
+    ) { request ->
+        try {
+            val startLat = request.arguments?.get("start_lat")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull()
+            val startLng = request.arguments?.get("start_lng")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull()
+            val startAddress = request.arguments?.get("start_address")?.toString()?.removeSurrounding("\"")
+            val distanceKm = request.arguments?.get("distance_km")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide 'distance_km' parameter (desired route distance in km)")))
+            val activityType = request.arguments?.get("activity_type")?.toString()?.removeSurrounding("\"") ?: "run"
+            val numPoints = (request.arguments?.get("num_points")?.toString()?.removeSurrounding("\"")?.toIntOrNull() ?: 4).coerceIn(1, 8)
+            val seed = request.arguments?.get("seed")?.toString()?.removeSurrounding("\"")?.toIntOrNull()
+
+            val (lat, lng) = if (startLat != null && startLng != null) {
+                Pair(startLat, startLng)
+            } else if (!startAddress.isNullOrBlank()) {
+                geocodeAddress(startAddress)
+                    ?: return@addTool CallToolResult(content = listOf(TextContent("Failed to geocode address: $startAddress")))
+            } else {
+                return@addTool CallToolResult(content = listOf(TextContent("Please provide either start_lat + start_lng or start_address")))
+            }
+
+            val travelMode = mapActivityTypeToTravelMode(activityType)
+            val waypoints = generateWaypoints(lat, lng, distanceKm, numPoints, seed)
+            val mapsUrl = buildGoogleMapsUrl(Pair(lat, lng), waypoints, travelMode)
+
+            val result = buildString {
+                appendLine("Route suggestion (~${"%.1f".format(distanceKm)} km ${activityType})")
+                appendLine("=".repeat(40))
+                appendLine("Start: ${"%.6f".format(lat)}, ${"%.6f".format(lng)}")
+                appendLine("Waypoints: $numPoints")
+                appendLine("Mode: $travelMode")
+                appendLine()
+                appendLine("Open in Google Maps:")
+                appendLine(mapsUrl)
+                appendLine()
+                appendLine("Google Maps will calculate the actual road route with turn-by-turn directions.")
+                if (seed != null) {
+                    appendLine("Seed: $seed (use a different seed for an alternative route)")
+                } else {
+                    appendLine("Tip: provide a 'seed' parameter for reproducible routes, or change it to get a different route.")
+                }
+            }
+            return@addTool CallToolResult(content = listOf(TextContent(result)))
+        } catch (e: Exception) {
+            logger.error("Error generating route: {}", e.message)
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "popular_routes",
+        description = """Find popular Strava segments near a location and generate a Google Maps route through them. Uses Strava's Segment Explore API to find well-known segments, orders them into a loop, and returns a navigable Google Maps link.
+Parameters:
+- start_lat (Double, optional): Starting latitude. Required if start_address is not provided.
+- start_lng (Double, optional): Starting longitude. Required if start_address is not provided.
+- start_address (String, optional): Address to geocode as starting point. Alternative to lat/lng.
+- activity_type (String, optional): "run" or "ride". Default: "run".
+- radius_km (Double, optional): Search radius in km (1-50). Default: 5.0.
+- max_segments (Int, optional): Maximum segments to include (1-5). Default: 5."""
+    ) { request ->
+        try {
+            val startLat = request.arguments?.get("start_lat")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull()
+            val startLng = request.arguments?.get("start_lng")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull()
+            val startAddress = request.arguments?.get("start_address")?.toString()?.removeSurrounding("\"")
+            val activityType = request.arguments?.get("activity_type")?.toString()?.removeSurrounding("\"") ?: "run"
+            val radiusKm = (request.arguments?.get("radius_km")?.toString()?.removeSurrounding("\"")?.toDoubleOrNull() ?: 5.0).coerceIn(1.0, 50.0)
+            val maxSegments = (request.arguments?.get("max_segments")?.toString()?.removeSurrounding("\"")?.toIntOrNull() ?: 5).coerceIn(1, 5)
+
+            val (lat, lng) = if (startLat != null && startLng != null) {
+                Pair(startLat, startLng)
+            } else if (!startAddress.isNullOrBlank()) {
+                geocodeAddress(startAddress)
+                    ?: return@addTool CallToolResult(content = listOf(TextContent("Failed to geocode address: $startAddress")))
+            } else {
+                return@addTool CallToolResult(content = listOf(TextContent("Please provide either start_lat + start_lng or start_address")))
+            }
+
+            val segments = exploreSegments(lat, lng, radiusKm, activityType)
+            if (segments.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No segments found near (${"%.4f".format(lat)}, ${"%.4f".format(lng)}). Try increasing radius_km or changing activity_type.")))
+            }
+
+            val capped = segments.take(maxSegments)
+            val waypoints = orderSegmentsIntoLoop(capped, lat, lng)
+            val travelMode = mapActivityTypeToTravelMode(activityType)
+            val mapsUrl = buildGoogleMapsUrl(Pair(lat, lng), waypoints, travelMode)
+
+            val result = buildString {
+                appendLine("Popular Segments Route (${activityType}, ${radiusKm}km radius)")
+                appendLine("=".repeat(50))
+                appendLine("Start: ${"%.4f".format(lat)}, ${"%.4f".format(lng)}")
+                appendLine()
+                appendLine("Segments (${capped.size}):")
+                capped.forEachIndexed { i, seg ->
+                    appendLine("  ${i + 1}. ${seg.name}")
+                    appendLine("     Distance: ${"%.1f".format(seg.distance)}m | Grade: ${"%.1f".format(seg.avg_grade)}% | Climb: ${climbCategoryLabel(seg.climb_category)} | Elev: ${"%.0f".format(seg.elev_difference)}m")
+                }
+                appendLine()
+                appendLine("Open in Google Maps:")
+                appendLine(mapsUrl)
+                appendLine()
+                appendLine("Google Maps will route you along roads through these popular segments.")
+            }
+            return@addTool CallToolResult(content = listOf(TextContent(result)))
+        } catch (e: Exception) {
+            logger.error("Error finding popular routes: {}", e.message)
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
         name = "logout",
         description = "Clear stored Strava authentication tokens. Use this to switch accounts or fix authentication issues."
     ) { _ ->
