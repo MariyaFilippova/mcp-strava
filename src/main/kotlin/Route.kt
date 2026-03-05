@@ -1,6 +1,8 @@
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.net.URLEncoder
@@ -25,7 +27,9 @@ fun mapActivityTypeToTravelMode(activityType: String): String {
 }
 
 suspend fun geocodeAddress(address: String): Pair<Double, Double>? {
-    val encoded = URLEncoder.encode(address, "UTF-8")
+    val encoded = withContext(Dispatchers.IO) {
+        URLEncoder.encode(address, "UTF-8")
+    }
     val url = "https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=1"
     logger.debug("Nominatim geocode: {}", url)
 
