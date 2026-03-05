@@ -76,6 +76,116 @@ suspend fun getActivityStreams(id: Long): String? {
 }
 
 /**
+ * Fetch a single activity by its ID.
+ */
+suspend fun getActivityById(id: Long): Activity? {
+    Auth.auth()
+    val url = "https://www.strava.com/api/v3/activities/$id"
+    val response = performGetRequest(url) ?: return null
+    return try {
+        jsonConfig.decodeFromString<Activity>(response)
+    } catch (e: Exception) {
+        logger.error("Failed to parse activity {}: {}", id, e.message)
+        null
+    }
+}
+
+/**
+ * Search activities with optional date range and pagination.
+ * @param before Unix timestamp — return activities before this time
+ * @param after Unix timestamp — return activities after this time
+ * @param page Page number (1-based)
+ * @param perPage Number of results per page (max 200)
+ */
+suspend fun searchActivities(before: Long? = null, after: Long? = null, page: Int = 1, perPage: Int = 30): List<Activity> {
+    Auth.auth()
+    val params = mutableListOf<String>()
+    params.add("page=$page")
+    params.add("per_page=$perPage")
+    if (before != null) params.add("before=$before")
+    if (after != null) params.add("after=$after")
+    val url = "https://www.strava.com/api/v3/activities?${params.joinToString("&")}"
+    val response = performGetRequest(url) ?: return emptyList()
+    return try {
+        val activities = jsonConfig.decodeFromString<List<Activity>>(response)
+        logger.debug("Search returned {} activities (page {})", activities.size, page)
+        activities
+    } catch (e: Exception) {
+        logger.error("Failed to parse search results: {}", e.message)
+        emptyList()
+    }
+}
+
+/**
+ * Fetch activity streams for any activity by ID with configurable stream types.
+ */
+suspend fun getActivityStreamsById(
+    id: Long,
+    streamTypes: String = "heartrate,distance,altitude,velocity_smooth,cadence,watts,time,latlng,grade_smooth"
+): String? {
+    Auth.auth()
+    val url = "https://www.strava.com/api/v3/activities/$id/streams?keys=$streamTypes&key_by_type=true"
+    return performGetRequest(url)
+}
+
+@Serializable
+data class Lap(
+    val name: String,
+    val elapsed_time: Int,
+    val moving_time: Int,
+    val distance: Double,
+    val average_speed: Double,
+    val max_speed: Double,
+    val average_heartrate: Double? = null,
+    val max_heartrate: Double? = null,
+    val lap_index: Int,
+    val total_elevation_gain: Double
+) {
+    fun format(): String {
+        val minutes = moving_time / 60
+        val seconds = moving_time % 60
+        return buildString {
+            append("Lap ${lap_index}: $name")
+            appendLine()
+            append("  Distance: ${"%.2f".format(distance / 1000)} km")
+            appendLine()
+            append("  Moving Time: ${minutes}m ${seconds}s")
+            appendLine()
+            append("  Avg Speed: ${"%.2f".format(average_speed)} m/s")
+            appendLine()
+            append("  Max Speed: ${"%.2f".format(max_speed)} m/s")
+            appendLine()
+            append("  Elevation Gain: ${"%.1f".format(total_elevation_gain)} m")
+            if (average_heartrate != null) {
+                appendLine()
+                append("  Avg HR: ${"%.0f".format(average_heartrate)} bpm")
+            }
+            if (max_heartrate != null) {
+                appendLine()
+                append("  Max HR: ${"%.0f".format(max_heartrate)} bpm")
+            }
+        }
+    }
+}
+
+/**
+ * Fetch lap data for an activity.
+ */
+suspend fun getActivityLaps(id: Long): List<Lap> {
+    Auth.auth()
+    val url = "https://www.strava.com/api/v3/activities/$id/laps"
+    val response = performGetRequest(url) ?: return emptyList()
+    return try {
+        val laps = jsonConfig.decodeFromString<List<Lap>>(response)
+        logger.debug("Fetched {} laps for activity {}", laps.size, id)
+        laps
+    } catch (e: Exception) {
+        logger.error("Failed to parse laps for activity {}: {}", id, e.message)
+        emptyList()
+    }
+}
+
+/**
  * Fetch recent activities with configurable count.
  */
 suspend fun getRecentActivities(count: Int = 10): List<Activity> {

@@ -205,6 +205,174 @@ class ActivityTest {
     }
 
     @Test
+    fun `Lap parsing from JSON works correctly`() {
+        val json = """
+            {
+                "name": "Lap 1",
+                "elapsed_time": 360,
+                "moving_time": 350,
+                "distance": 1000.0,
+                "average_speed": 2.86,
+                "max_speed": 3.5,
+                "average_heartrate": 155.0,
+                "max_heartrate": 170.0,
+                "lap_index": 1,
+                "total_elevation_gain": 15.0
+            }
+        """.trimIndent()
+
+        val lap = jsonConfig.decodeFromString<Lap>(json)
+
+        assertEquals("Lap 1", lap.name)
+        assertEquals(350, lap.moving_time)
+        assertEquals(1000.0, lap.distance)
+        assertEquals(1, lap.lap_index)
+        assertEquals(155.0, lap.average_heartrate)
+        assertEquals(15.0, lap.total_elevation_gain)
+    }
+
+    @Test
+    fun `Lap parsing handles missing heartrate`() {
+        val json = """
+            {
+                "name": "Lap 2",
+                "elapsed_time": 400,
+                "moving_time": 390,
+                "distance": 1200.0,
+                "average_speed": 3.08,
+                "max_speed": 4.0,
+                "lap_index": 2,
+                "total_elevation_gain": 20.0
+            }
+        """.trimIndent()
+
+        val lap = jsonConfig.decodeFromString<Lap>(json)
+
+        assertEquals(null, lap.average_heartrate)
+        assertEquals(null, lap.max_heartrate)
+    }
+
+    @Test
+    fun `Lap format produces readable output`() {
+        val lap = Lap(
+            name = "Lap 1",
+            elapsed_time = 360,
+            moving_time = 305,
+            distance = 1000.0,
+            average_speed = 3.28,
+            max_speed = 4.0,
+            average_heartrate = 155.0,
+            max_heartrate = 170.0,
+            lap_index = 1,
+            total_elevation_gain = 15.0
+        )
+        val formatted = lap.format()
+
+        assertContains(formatted, "Lap 1")
+        assertContains(formatted, "km")
+        assertContains(formatted, "5m 5s")
+        assertContains(formatted, "Avg HR: 155 bpm")
+        assertContains(formatted, "Max HR: 170 bpm")
+        assertContains(formatted, "Elevation Gain:")
+    }
+
+    @Test
+    fun `Lap format omits heartrate when missing`() {
+        val lap = Lap(
+            name = "Lap 2",
+            elapsed_time = 400,
+            moving_time = 390,
+            distance = 1200.0,
+            average_speed = 3.08,
+            max_speed = 4.0,
+            average_heartrate = null,
+            max_heartrate = null,
+            lap_index = 2,
+            total_elevation_gain = 20.0
+        )
+        val formatted = lap.format()
+
+        assertTrue(!formatted.contains("Avg HR"))
+        assertTrue(!formatted.contains("Max HR"))
+    }
+
+    @Test
+    fun `Activity parsing by ID returns correct fields`() {
+        val json = """
+            {
+                "name": "Afternoon Run",
+                "distance": 8500.0,
+                "moving_time": 2700,
+                "elapsed_time": 3000,
+                "total_elevation_gain": 75.0,
+                "type": "Run",
+                "sport_type": "Run",
+                "id": 123456789,
+                "start_date": "2024-06-15T14:00:00Z",
+                "start_date_local": "2024-06-15T16:00:00Z",
+                "location_country": "France",
+                "achievement_count": 2,
+                "kudos_count": 5,
+                "average_speed": 3.15,
+                "max_speed": 4.5,
+                "has_heartrate": true,
+                "average_heartrate": 160.0,
+                "max_heartrate": 180.0,
+                "elev_high": 250.0,
+                "elev_low": 175.0
+            }
+        """.trimIndent()
+
+        val activity = jsonConfig.decodeFromString<Activity>(json)
+
+        assertEquals(123456789L, activity.id)
+        assertEquals("Afternoon Run", activity.name)
+        assertEquals(8500.0, activity.distance)
+        assertEquals("France", activity.location_country)
+        assertEquals(160.0, activity.average_heartrate)
+    }
+
+    @Test
+    fun `Lap list parsing from JSON array works`() {
+        val json = """
+            [
+                {
+                    "name": "Lap 1",
+                    "elapsed_time": 300,
+                    "moving_time": 290,
+                    "distance": 1000.0,
+                    "average_speed": 3.45,
+                    "max_speed": 4.0,
+                    "average_heartrate": 150.0,
+                    "max_heartrate": 165.0,
+                    "lap_index": 1,
+                    "total_elevation_gain": 10.0
+                },
+                {
+                    "name": "Lap 2",
+                    "elapsed_time": 310,
+                    "moving_time": 300,
+                    "distance": 1000.0,
+                    "average_speed": 3.33,
+                    "max_speed": 3.8,
+                    "average_heartrate": 160.0,
+                    "max_heartrate": 175.0,
+                    "lap_index": 2,
+                    "total_elevation_gain": 12.0
+                }
+            ]
+        """.trimIndent()
+
+        val laps = jsonConfig.decodeFromString<List<Lap>>(json)
+
+        assertEquals(2, laps.size)
+        assertEquals("Lap 1", laps[0].name)
+        assertEquals("Lap 2", laps[1].name)
+        assertEquals(150.0, laps[0].average_heartrate)
+        assertEquals(160.0, laps[1].average_heartrate)
+    }
+
+    @Test
     fun `month timestamp calculation is correct for January`() {
         val startOfJan2025 = java.time.LocalDate.of(2025, 1, 1)
             .atStartOfDay(java.time.ZoneOffset.UTC)

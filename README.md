@@ -5,7 +5,10 @@ A Model Context Protocol (MCP) server that integrates Strava with Claude for Des
 ## Features
 
 - **OAuth Authentication** with automatic token refresh and persistence
-- **Activity Analysis** - get details on recent activities
+- **Activity Analysis** - get details on any activity by ID, or browse recent ones
+- **Data Streams** - heart rate, pace, altitude, cadence, power, GPS for any activity
+- **Lap Splits** - per-lap distance, time, speed, elevation, and heart rate
+- **Paginated Search** - find activities by date range with full pagination
 - **Historical Comparisons** - compare months year-over-year
 - **Statistics** - all-time stats, weekly/monthly summaries
 - **Filtering** - by activity type (Run, Ride, Swim, etc.)
@@ -17,7 +20,9 @@ A Model Context Protocol (MCP) server that integrates Strava with Claude for Des
 | `auth_strava` | Authorize with Strava (opens browser) |
 | `logout` | Clear stored tokens to switch accounts |
 | `last_activity` | Get details of your most recent activity |
+| `get_activity` | Fetch any activity by its ID |
 | `recent_activities` | List last 10 activities |
+| `search_activities` | Paginated search with optional date range (`before`/`after` epoch, `page`, `per_page`) |
 | `athlete_stats` | All-time statistics (rides, runs, swims) |
 | `activities_by_type` | Filter activities by sport type |
 | `weekly_summary` | Summary of the past 7 days |
@@ -25,6 +30,8 @@ A Model Context Protocol (MCP) server that integrates Strava with Claude for Des
 | `month_summary` | Summary for a specific month/year |
 | `compare_months` | Compare two months (e.g., Jan 2025 vs Jan 2026) |
 | `get_streams` | Heart rate data for last activity |
+| `get_activity_streams` | Full data streams (HR, pace, altitude, cadence, power, GPS, etc.) for any activity |
+| `get_laps` | Lap splits for any activity (distance, time, speed, elevation, HR) |
 
 ## Setup
 
@@ -93,6 +100,9 @@ Once configured, you can ask Claude things like:
 - "Compare my January 2025 with January 2026"
 - "Give me a summary of my cycling this week"
 - "How did my training this month compare to last month?"
+- "Show me the lap splits for activity 123456789"
+- "Analyze the heart rate and elevation data for my last run"
+- "Find all my activities from March 2025"
 
 ## Authentication
 

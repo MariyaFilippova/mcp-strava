@@ -281,6 +281,82 @@ fun configureServer(): Server {
     }
 
     server.addTool(
+        name = "get_activity",
+        description = "Fetch a specific Strava activity by its ID. Returns full activity details including distance, time, elevation, heartrate, etc."
+    ) { request ->
+        try {
+            val id = request.arguments?.get("id")?.toString()?.removeSurrounding("\"")?.toLongOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide an 'id' parameter (activity ID)")))
+            val activity = getActivityById(id)
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Activity $id not found or failed to fetch")))
+            return@addTool CallToolResult(content = listOf(TextContent(activity.getAllInfo())))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "search_activities",
+        description = "Search Strava activities with optional date range and pagination. Parameters: 'before' (epoch timestamp, optional), 'after' (epoch timestamp, optional), 'page' (default 1), 'per_page' (default 30, max 200)."
+    ) { request ->
+        try {
+            val before = request.arguments?.get("before")?.toString()?.removeSurrounding("\"")?.toLongOrNull()
+            val after = request.arguments?.get("after")?.toString()?.removeSurrounding("\"")?.toLongOrNull()
+            val page = request.arguments?.get("page")?.toString()?.removeSurrounding("\"")?.toIntOrNull() ?: 1
+            val perPage = (request.arguments?.get("per_page")?.toString()?.removeSurrounding("\"")?.toIntOrNull() ?: 30).coerceIn(1, 200)
+            val activities = searchActivities(before = before, after = after, page = page, perPage = perPage)
+            if (activities.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No activities found")))
+            }
+            val result = activities.mapIndexed { index, activity ->
+                val num = (page - 1) * perPage + index + 1
+                "$num. ${activity.name} (${activity.sport_type}) - ${"%.2f".format(activity.distance / 1000)} km on ${activity.start_date_local} [ID: ${activity.id}]"
+            }.joinToString("\n")
+            return@addTool CallToolResult(content = listOf(TextContent("Activities (page $page):\n$result")))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "get_activity_streams",
+        description = "Get detailed data streams for any Strava activity. Returns time-series data like heartrate, distance, altitude, speed, cadence, power, GPS, and grade. Parameters: 'activity_id' (required), 'stream_types' (optional, comma-separated, default: heartrate,distance,altitude,velocity_smooth,cadence,watts,time,latlng,grade_smooth)."
+    ) { request ->
+        try {
+            val activityId = request.arguments?.get("activity_id")?.toString()?.removeSurrounding("\"")?.toLongOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide an 'activity_id' parameter")))
+            val streamTypes = request.arguments?.get("stream_types")?.toString()?.removeSurrounding("\"")
+            val streams = if (streamTypes != null) {
+                getActivityStreamsById(activityId, streamTypes)
+            } else {
+                getActivityStreamsById(activityId)
+            }
+            streams ?: return@addTool CallToolResult(content = listOf(TextContent("Failed to get streams for activity $activityId")))
+            return@addTool CallToolResult(content = listOf(TextContent(streams)))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
+        name = "get_laps",
+        description = "Get lap data for a Strava activity. Returns lap splits with distance, time, speed, elevation, and heartrate for each lap. Parameter: 'activity_id' (required)."
+    ) { request ->
+        try {
+            val activityId = request.arguments?.get("activity_id")?.toString()?.removeSurrounding("\"")?.toLongOrNull()
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide an 'activity_id' parameter")))
+            val laps = getActivityLaps(activityId)
+            if (laps.isEmpty()) {
+                return@addTool CallToolResult(content = listOf(TextContent("No laps found for activity $activityId")))
+            }
+            val result = laps.joinToString("\n\n") { it.format() }
+            return@addTool CallToolResult(content = listOf(TextContent("Laps for activity $activityId:\n\n$result")))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
         name = "logout",
         description = "Clear stored Strava authentication tokens. Use this to switch accounts or fix authentication issues."
     ) { _ ->
