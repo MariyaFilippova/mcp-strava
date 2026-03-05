@@ -65,7 +65,7 @@ CLIENT_SECRET="your-client-secret"
 ./gradlew shadowJar
 ```
 
-The JAR will be at: `build/libs/strava-mcp-server-2.0.0-all.jar`
+The JAR will be at: `build/libs/strava-mcp-server-2.1.0-all.jar`
 
 ### 4. Configure Claude for Desktop
 
@@ -88,7 +88,7 @@ Add the MCP server:
       "command": "java",
       "args": [
         "-jar",
-        "/absolute/path/to/mcp-strava/build/libs/strava-mcp-server-2.0.0-all.jar"
+        "/absolute/path/to/mcp-strava/build/libs/strava-mcp-server-2.1.0-all.jar"
       ]
     }
   }
