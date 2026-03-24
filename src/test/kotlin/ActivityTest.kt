@@ -15,7 +15,8 @@ class ActivityTest {
         sportType: String = "Run",
         id: Long = 12345L,
         averageHeartrate: Double? = 150.0,
-        maxHeartrate: Double? = 175.0
+        maxHeartrate: Double? = 175.0,
+        gearId: String? = null
     ) = Activity(
         name = name,
         distance = distance,
@@ -36,7 +37,8 @@ class ActivityTest {
         average_heartrate = averageHeartrate,
         max_heartrate = maxHeartrate,
         elev_high = 100.0,
-        elev_low = 50.0
+        elev_low = 50.0,
+        gear_id = gearId
     )
 
     @Test
@@ -389,5 +391,112 @@ class ActivityTest {
 
         val daysInFeb2025 = java.time.YearMonth.of(2025, 2).lengthOfMonth()
         assertEquals(28, daysInFeb2025) // 2025 is not a leap year
+    }
+
+    @Test
+    fun `Gear parsing from JSON works correctly`() {
+        val json = """
+            {
+                "id": "g12345",
+                "name": "Nike Pegasus 40",
+                "brand_name": "Nike",
+                "model_name": "Pegasus 40",
+                "distance": 450000.0,
+                "primary": true,
+                "description": "Daily trainer",
+                "weight": 280.0
+            }
+        """.trimIndent()
+
+        val gear = jsonConfig.decodeFromString<Gear>(json)
+
+        assertEquals("g12345", gear.id)
+        assertEquals("Nike Pegasus 40", gear.name)
+        assertEquals("Nike", gear.brand_name)
+        assertEquals("Pegasus 40", gear.model_name)
+        assertEquals(450000.0, gear.distance)
+        assertEquals(true, gear.primary)
+        assertEquals("Daily trainer", gear.description)
+        assertEquals(280.0, gear.weight)
+    }
+
+    @Test
+    fun `Gear parsing handles missing optional fields`() {
+        val json = """
+            {
+                "id": "g99999",
+                "name": "Old Bike",
+                "distance": 10000.0
+            }
+        """.trimIndent()
+
+        val gear = jsonConfig.decodeFromString<Gear>(json)
+
+        assertEquals("g99999", gear.id)
+        assertEquals("Old Bike", gear.name)
+        assertEquals(null, gear.brand_name)
+        assertEquals(null, gear.model_name)
+        assertEquals(10000.0, gear.distance)
+        assertEquals(false, gear.primary)
+        assertEquals(null, gear.description)
+        assertEquals(null, gear.weight)
+    }
+
+    @Test
+    fun `Gear format produces readable output`() {
+        val gear = Gear(
+            id = "g12345",
+            name = "Nike Pegasus 40",
+            brand_name = "Nike",
+            model_name = "Pegasus 40",
+            distance = 450000.0,
+            primary = true,
+            description = "Daily trainer",
+            weight = 280.0
+        )
+        val formatted = gear.format()
+
+        assertContains(formatted, "Nike Pegasus 40")
+        assertContains(formatted, "Nike")
+        assertContains(formatted, "Pegasus 40")
+        assertContains(formatted, "450")
+        assertContains(formatted, "km")
+        assertContains(formatted, "280 g")
+        assertContains(formatted, "Primary: Yes")
+        assertContains(formatted, "Daily trainer")
+    }
+
+    @Test
+    fun `Gear format omits optional fields when missing`() {
+        val gear = Gear(
+            id = "g99999",
+            name = "Old Bike",
+            distance = 10000.0
+        )
+        val formatted = gear.format()
+
+        assertContains(formatted, "Old Bike")
+        assertContains(formatted, "10")
+        assertContains(formatted, "km")
+        assertTrue(!formatted.contains("Brand/Model"))
+        assertTrue(!formatted.contains("Weight"))
+        assertTrue(!formatted.contains("Primary"))
+        assertTrue(!formatted.contains("Description"))
+    }
+
+    @Test
+    fun `getAllInfo includes gear_id when present`() {
+        val activity = createTestActivity(gearId = "g12345")
+        val info = activity.getAllInfo()
+
+        assertContains(info, "Gear ID: g12345")
+    }
+
+    @Test
+    fun `getAllInfo shows NA when gear_id is null`() {
+        val activity = createTestActivity()
+        val info = activity.getAllInfo()
+
+        assertContains(info, "Gear ID: N/A")
     }
 }

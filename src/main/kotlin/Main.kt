@@ -481,6 +481,21 @@ Parameters:
     }
 
     server.addTool(
+        name = "get_gear",
+        description = "Get details about a piece of gear (shoes, bike, etc.) by its Strava gear ID. Returns name, brand, model, total distance, and weight. Parameter: 'gear_id' (required, e.g., 'g12345')."
+    ) { request ->
+        try {
+            val gearId = request.arguments?.get("gear_id")?.toString()?.removeSurrounding("\"")
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Please provide a 'gear_id' parameter")))
+            val gear = getGearById(gearId)
+                ?: return@addTool CallToolResult(content = listOf(TextContent("Gear '$gearId' not found or failed to fetch")))
+            return@addTool CallToolResult(content = listOf(TextContent(gear.format())))
+        } catch (e: Exception) {
+            return@addTool CallToolResult(content = listOf(TextContent("An error occurred: ${e.message}")))
+        }
+    }
+
+    server.addTool(
         name = "logout",
         description = "Clear stored Strava authentication tokens. Use this to switch accounts or fix authentication issues."
     ) { _ ->

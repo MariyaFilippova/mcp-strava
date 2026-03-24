@@ -42,7 +42,8 @@ data class Activity(
     val average_heartrate: Double? = null,
     val max_heartrate: Double? = null,
     val elev_high: Double,
-    val elev_low: Double
+    val elev_low: Double,
+    val gear_id: String? = null
 )
 
 /**
@@ -165,6 +166,52 @@ data class Lap(
                 append("  Max HR: ${"%.0f".format(max_heartrate)} bpm")
             }
         }
+    }
+}
+
+@Serializable
+data class Gear(
+    val id: String,
+    val name: String,
+    val brand_name: String? = null,
+    val model_name: String? = null,
+    val distance: Double = 0.0,
+    val primary: Boolean = false,
+    val description: String? = null,
+    val weight: Double? = null
+) {
+    fun format(): String {
+        return buildString {
+            appendLine("Gear: $name")
+            if (brand_name != null || model_name != null) {
+                appendLine("Brand/Model: ${brand_name ?: "N/A"} / ${model_name ?: "N/A"}")
+            }
+            appendLine("Total Distance: ${"%.1f".format(distance / 1000)} km")
+            if (weight != null) {
+                appendLine("Weight: ${"%.0f".format(weight)} g")
+            }
+            if (primary) {
+                appendLine("Primary: Yes")
+            }
+            if (!description.isNullOrBlank()) {
+                appendLine("Description: $description")
+            }
+        }.trimEnd()
+    }
+}
+
+/**
+ * Fetch gear details by ID.
+ */
+suspend fun getGearById(id: String): Gear? {
+    Auth.auth()
+    val url = "https://www.strava.com/api/v3/gear/$id"
+    val response = performGetRequest(url) ?: return null
+    return try {
+        jsonConfig.decodeFromString<Gear>(response)
+    } catch (e: Exception) {
+        logger.error("Failed to parse gear {}: {}", id, e.message)
+        null
     }
 }
 
@@ -350,5 +397,6 @@ fun Activity.getAllInfo(): String {
         Max Heartrate: ${max_heartrate ?: "N/A"} bpm
         Elevation (High): ${"%.2f".format(elev_high)} meters
         Elevation (Low): ${"%.2f".format(elev_low)} meters
+        Gear ID: ${gear_id ?: "N/A"}
     """.trimIndent()
 }
