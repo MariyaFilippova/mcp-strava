@@ -5,7 +5,8 @@
 A Model Context Protocol (MCP) server that integrates Strava with Claude for Desktop, enabling AI-powered analysis of your fitness activities.
 
 ## Features
-
+- ⭐ **Route Generation** - suggest round-trip routes with a Google Maps link (no API key needed)
+- ⭐ **Popular Routes** - discover popular Strava segments nearby and get a Google Maps loop through them
 - **OAuth Authentication** with automatic token refresh and persistence
 - **Activity Analysis** - get details on any activity by ID, or browse recent ones
 - **Data Streams** - heart rate, pace, altitude, cadence, power, GPS for any activity
@@ -14,8 +15,6 @@ A Model Context Protocol (MCP) server that integrates Strava with Claude for Des
 - **Historical Comparisons** - compare months year-over-year
 - **Statistics** - all-time stats, weekly/monthly summaries
 - **Filtering** - by activity type (Run, Ride, Swim, etc.)
-- **Route Generation** - suggest round-trip routes with a Google Maps link (no API key needed)
-- **Popular Routes** - discover popular Strava segments nearby and get a Google Maps loop through them
 
 ## Available Tools
 
